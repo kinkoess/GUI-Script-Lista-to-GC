@@ -82,7 +82,7 @@ if st.session_state.get('procesar') and datos_input:
         st.subheader("2. Modo de Exportación")
         modo = st.radio(
             "¿Cómo quieres exportar tus eventos?",
-            ["Lista Completa (Todo en un solo archivo)", "Filtrar por Categoría (Separar calendarios)"],
+            ["Lista Completa (Todo en un solo calendario)", "Filtrar por Categoría (Separar calendarios)"],
             index=0
         )
 
