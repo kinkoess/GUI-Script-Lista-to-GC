@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(page_title="OdontoCalendar Tool", page_icon="🦷")
@@ -8,26 +9,32 @@ st.set_page_config(page_title="OdontoCalendar Tool", page_icon="🦷")
 # --- ESTILO CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    /* Ocultar botón automático de la tabla */
     [data-testid="stElementToolbar"] { display: none; }
-
-    /* Borde VERDE cuando el cuadro de texto está activo */
     textarea:focus {
         border-color: #28a745 !important;
         box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25) !important;
     }
-    
-    /* Escondemos la etiqueta original del text_area */
-    .stTextArea label {
-        display: none;
-    }
+    .stTextArea label { display: none; }
     </style>
     """, unsafe_allow_html=True)
 
 # Título con salto de línea
 st.markdown("# 🦷 OdontoCalendar:  \n# Tabla OneNote a Google Calendar")
 
+# --- LÓGICA DE REINICIO ---
+if 'procesar' not in st.session_state:
+    st.session_state['procesar'] = False
+
+def limpiar_estado():
+    st.session_state['procesar'] = False
+
 st.subheader("1. Carga de Datos")
+
+# Selector de Año Académico
+anio_actual = datetime.now().year
+col_anio, _ = st.columns([1, 2])
+with col_anio:
+    anio = st.number_input("Año Académico:", value=2026, step=1) # Dejado en 2026 por tu solicitud anterior
 
 # Contenedor para el mensaje inicial
 contenedor_mensaje = st.empty()
@@ -36,7 +43,8 @@ contenedor_mensaje = st.empty()
 datos_input = st.text_area(
     label="Input_Tabla",
     height=150, 
-    placeholder="Pega aquí tu tabla de OneNote..."
+    placeholder="Pega aquí tu tabla de OneNote...",
+    on_change=limpiar_estado
 )
 
 # Lógica del mensaje de bienvenida
@@ -51,18 +59,15 @@ else:
 # --- PROCESAMIENTO Y VALIDACIÓN ---
 if st.session_state.get('procesar') and datos_input:
     try:
-        # Intentar leer la tabla primero
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
         
-        # Validar que existan las columnas necesarias
         columnas_requeridas = ['EVALUACION', 'ASIGNATURA', 'FECHA']
         if not all(col in df.columns for col in columnas_requeridas):
             st.error("❌ Error: La tabla no tiene el formato esperado (EVALUACION, ASIGNATURA, FECHA).")
-            st.stop() # DETIENE LA EJECUCIÓN AQUÍ SI HAY ERROR
+            st.stop()
 
-        # SI PASA LA VALIDACIÓN, RECIÉN AQUÍ DIBUJAMOS EL RESTO
         st.divider()
         
         abreviaciones = {
@@ -105,7 +110,8 @@ if st.session_state.get('procesar') and datos_input:
 
         calendar_df = pd.DataFrame()
         calendar_df['Subject'] = df_final.apply(formatear_titulo, axis=1)
-        calendar_df['Start Date'] = pd.to_datetime(df_final['FECHA'] + "-2026", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
+        # Usamos la variable 'anio' seleccionada arriba
+        calendar_df['Start Date'] = pd.to_datetime(df_final['FECHA'] + f"-{anio}", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
         calendar_df['End Date'] = calendar_df['Start Date']
         calendar_df['All Day Event'] = 'TRUE'
         calendar_df['Location'] = 'Universidad Mayor, Temuco'
@@ -114,7 +120,8 @@ if st.session_state.get('procesar') and datos_input:
         calendar_df.index = range(1, len(calendar_df) + 1)
         csv = calendar_df.to_csv(index=False).encode('utf-8')
         
-        st.success(f"✅ ¡Datos listos! {len(calendar_df)} eventos encontrados.")
+        st.success(f"✅ ¡Datos listos! {len(calendar_df)} eventos encontrados para '{nombre_archivo.replace('.csv', '')}'.")
+        
         st.download_button(
             label=f"📥 Descargar {nombre_archivo}",
             data=csv,
@@ -124,6 +131,10 @@ if st.session_state.get('procesar') and datos_input:
         )
         st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True)
 
+        if st.button("🔄 Cargar otra tabla / Reiniciar"):
+            st.session_state['procesar'] = False
+            st.rerun()
+
     except Exception as e:
-        st.error("❌ Error: La tabla no tiene el formato esperado. Asegúrate de copiar los encabezados.")
+        st.error(f"❌ Error crítico: {str(e)}")
         st.stop()
