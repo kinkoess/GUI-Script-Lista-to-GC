@@ -17,9 +17,9 @@ st.markdown("""
         box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25) !important;
     }
     
-    /* Estilo para las etiquetas */
+    /* Escondemos la etiqueta original */
     .stTextArea label {
-        display: none; /* Escondemos la etiqueta de arriba para usar el st.info */
+        display: none;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -27,25 +27,30 @@ st.markdown("""
 # Título con salto de línea
 st.markdown("# 🦷 OdontoCalendar:  \n# Tabla OneNote a Google Calendar")
 
-# LÓGICA DE INTERFAZ DINÁMICA
+# Inicializar estados si no existen
 if "procesar" not in st.session_state:
     st.session_state['procesar'] = False
 
-# 1. Entrada de datos
 st.subheader("1. Carga de Datos")
 
-# Si no hay texto, mostramos el mensaje informativo arriba del cuadro
+# LÓGICA DINÁMICA: Solo muestra el info si el área está vacía
+# Usamos un contenedor vacío para poder quitar el mensaje al instante
+placeholder_info = st.empty()
+
 datos_input = st.text_area(
-    label="Input de Tabla", # El label existe pero el CSS lo oculta
+    label="Input Invisible",
     height=150, 
-    placeholder="Pega aquí (EVALUACION, ASIGNATURA, FECHA)..."
+    placeholder="Pega aquí tu tabla de OneNote..."
 )
 
 if not datos_input:
-    st.info("💡 Por favor, pega la tabla de OneNote arriba para comenzar.")
-    st.session_state['procesar'] = False # Resetear si borran el texto
+    placeholder_info.info("💡 Por favor, pega la tabla de OneNote arriba para comenzar.")
+    st.session_state['procesar'] = False
 else:
-    # Si hay texto, el mensaje de arriba desaparece y sale el botón de procesar
+    # En cuanto hay texto, el placeholder se limpia solo
+    placeholder_info.empty()
+    
+    # Botón de Procesar que aparece justo debajo
     if st.button("🚀 Procesar Tabla Pegada", use_container_width=True):
         st.session_state['procesar'] = True
 
@@ -66,6 +71,7 @@ if st.session_state['procesar'] and datos_input:
             "2° Examen": "2° E."
         }
 
+        # Leer tabla
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
@@ -89,6 +95,7 @@ if st.session_state['procesar'] and datos_input:
 
         calendar_df = pd.DataFrame()
         calendar_df['Subject'] = df_filtrado.apply(formatear_titulo, axis=1)
+        # Año 2026 fijo por ahora
         calendar_df['Start Date'] = pd.to_datetime(df_filtrado['FECHA'] + "-2026", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
         calendar_df['End Date'] = calendar_df['Start Date']
         calendar_df['All Day Event'] = 'TRUE'
@@ -110,4 +117,4 @@ if st.session_state['procesar'] and datos_input:
         st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True)
 
     except Exception as e:
-        st.error("❌ Error: Verifica que copiaste la tabla completa con sus encabezados.")
+        st.error("❌ Error: La tabla no tiene el formato correcto (EVALUACION, ASIGNATURA, FECHA).")
