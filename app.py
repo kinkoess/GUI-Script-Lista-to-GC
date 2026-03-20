@@ -2,65 +2,115 @@ import streamlit as st
 import pandas as pd
 import io
 
-# Configuración básica
+# Configuración de la página
 st.set_page_config(page_title="OdontoCalendar Tool", page_icon="🦷")
 
-# CSS para el borde verde y limpiar la tabla
+# --- ESTILO CSS PERSONALIZADO ---
 st.markdown("""
     <style>
+    /* Ocultar botón automático de la tabla */
     [data-testid="stElementToolbar"] { display: none; }
-    textarea:focus { border-color: #28a745 !important; }
-    .stTextArea label { font-size: 1.1rem; font-weight: bold; color: #28a745; }
+
+    /* Borde VERDE cuando el cuadro de texto está activo */
+    textarea:focus {
+        border-color: #28a745 !important;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25) !important;
+    }
+    
+    /* Escondemos la etiqueta original del text_area */
+    .stTextArea label {
+        display: none;
+    }
     </style>
     """, unsafe_allow_html=True)
 
+# Título con salto de línea
 st.markdown("# 🦷 OdontoCalendar:  \n# Tabla OneNote a Google Calendar")
 
-# --- PASO 1: LA CARGA ---
 st.subheader("1. Carga de Datos")
-datos_input = st.text_area("📋 Pega aquí tu tabla de OneNote:", height=150, placeholder="EVALUACION\tASIGNATURA\tFECHA...")
 
-# EL TRUCO: Si no hay texto, mostramos el aviso. Si hay texto, el aviso desaparece 
-# y aparece el botón de procesar inmediatamente debajo.
+# CREAMOS UN CONTENEDOR PARA EL MENSAJE
+# Esto permite que el mensaje "vuele" en cuanto hay texto
+contenedor_mensaje = st.empty()
+
+# ÁREA DE TEXTO
+datos_input = st.text_area(
+    label="Input_Tabla",
+    height=150, 
+    placeholder="Pega aquí tu tabla de OneNote..."
+)
+
+# LÓGICA INSTANTÁNEA
 if not datos_input:
-    st.info("💡 Esperando que pegues la tabla... (Recuerda que al pegar, Streamlit necesita un segundo para detectar el cambio)")
+    contenedor_mensaje.info("💡 Por favor, pega la tabla de OneNote arriba para comenzar.")
+    # Resetear el estado de procesamiento si se borra el texto
+    st.session_state['procesar'] = False
 else:
-    # Este botón "desbloquea" el resto de la app
-    if st.button("🚀 PROCESAR TABLA AHORA", use_container_width=True):
-        st.session_state['listo'] = True
+    # SI HAY TEXTO, EL CONTENEDOR SE VACÍA INMEDIATAMENTE
+    contenedor_mensaje.empty()
+    
+    # Aparece el botón de procesar de una vez
+    if st.button("🚀 Procesar Tabla Pegada", use_container_width=True):
+        st.session_state['procesar'] = True
 
-# --- PASO 2: EL PROCESAMIENTO ---
-if st.session_state.get('listo') and datos_input:
+# --- PROCESAMIENTO ---
+if st.session_state.get('procesar') and datos_input:
     try:
         abreviaciones = {
-            "1° Teórica": "1° T.", "2° Teórica": "2° T.", "3° Teórica": "3° T.", "4° Teórica": "4° T.",
-            "1° Evaluación Clínica": "1° E.C.", "2° Evaluación Clínica": "2° E.C.", "Caso Clínico": "C.C.",
-            "Presentación CC": "P.CC", "1° Examen": "1° E.", "2° Examen": "2° E."
+            "1° Teórica": "1° T.",
+            "2° Teórica": "2° T.",
+            "3° Teórica": "3° T.",
+            "4° Teórica": "4° T.",
+            "1° Evaluación Clínica": "1° E.C.",
+            "2° Evaluación Clínica": "2° E.C.",
+            "Caso Clínico": "C.C.",
+            "Presentación CC": "P.CC",
+            "1° Examen": "1° E.",
+            "2° Examen": "2° E."
         }
 
+        # Leer tabla (OneNote usa tabuladores \t)
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
+        df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
         
-        opciones_finales = [opt for opt in abreviaciones.keys() if opt in df['EVALUACION'].unique()]
+        opciones_disponibles = [opt for opt in abreviaciones.keys() if opt in df['EVALUACION'].unique()]
+        otros = [opt for opt in df['EVALUACION'].unique() if opt not in abreviaciones.keys()]
+        opciones_finales = opciones_disponibles + otros
 
         st.divider()
         st.subheader("2. Filtra tu Calendario")
-        categoria = st.selectbox("¿Qué calendario vas a actualizar?", opciones_finales)
+        categoria = st.selectbox("¿Qué calendario vas a actualizar ahora?", opciones_finales)
         
-        # Filtro y Formato
         df_filtrado = df[df['EVALUACION'] == categoria].copy()
-        def f_tit(f): return f"{abreviaciones.get(f['EVALUACION'], f['EVALUACION'])} {f['ASIGNATURA']}"
+        
+        def formatear_titulo(fila):
+            eval_orig = fila['EVALUACION']
+            asignatura = fila['ASIGNATURA']
+            abrev = abreviaciones.get(eval_orig, eval_orig)
+            return f"{abrev} {asignatura}"
 
-        cal_df = pd.DataFrame()
-        cal_df['Subject'] = df_filtrado.apply(f_tit, axis=1)
-        cal_df['Start Date'] = pd.to_datetime(df_filtrado['FECHA'] + "-2026", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
-        cal_df['End Date'] = cal_df['Start Date']
-        cal_df['All Day Event'] = 'TRUE'
-        cal_df['Location'] = 'Universidad Mayor, Temuco'
+        calendar_df = pd.DataFrame()
+        calendar_df['Subject'] = df_filtrado.apply(formatear_titulo, axis=1)
+        calendar_df['Start Date'] = pd.to_datetime(df_filtrado['FECHA'] + "-2026", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
+        calendar_df['End Date'] = calendar_df['Start Date']
+        calendar_df['All Day Event'] = 'TRUE'
+        calendar_df['Location'] = 'Universidad Mayor, Temuco'
+        calendar_df['Private'] = 'TRUE'
 
-        st.success(f"✅ ¡{len(cal_df)} eventos listos!")
-        st.download_button(f"📥 Descargar {categoria}.csv", cal_df.to_csv(index=False).encode('utf-8'), f"{categoria}.csv", "text/csv", use_container_width=True)
-        st.dataframe(cal_df[['Subject', 'Start Date']], use_container_width=True)
+        csv = calendar_df.to_csv(index=False).encode('utf-8')
+        
+        st.success(f"✅ ¡Tabla detectada! {len(calendar_df)} eventos encontrados.")
+        
+        st.download_button(
+            label=f"📥 Descargar {categoria}.csv",
+            data=csv,
+            file_name=f"{categoria}.csv",
+            mime='text/csv',
+            use_container_width=True
+        )
+        
+        st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True)
 
     except Exception as e:
-        st.error("❌ Error en el formato. Asegúrate de copiar la tabla completa con títulos.")
+        st.error("❌ Error: La tabla no tiene el formato esperado. Asegúrate de copiar los encabezados.")
