@@ -49,7 +49,7 @@ datos_input = st.text_area(
 
 # Lógica del mensaje de bienvenida
 if not datos_input:
-    contenedor_mensaje.info("💡 Por favor, pega la tabla de OneNote arriba para comenzar. (Opcional: columna 'HORA')")
+    contenedor_mensaje.info("💡 Por favor, pega la tabla de OneNote abajo para comenzar. (Opcional: columna 'HORA')")
     st.session_state['procesar'] = False
 else:
     contenedor_mensaje.empty()
