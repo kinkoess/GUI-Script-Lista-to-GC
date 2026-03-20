@@ -59,10 +59,10 @@ else:
 # --- PROCESAMIENTO Y VALIDACIÓN ---
 if st.session_state.get('procesar') and datos_input:
     try:
-        # Leer tabla y limpiar NaNs inmediatamente para evitar el "None" visual
+        # Leer tabla y limpiar NaNs inmediatamente
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
-        df = df.fillna("") # Cambia los nulos por texto vacío
+        df = df.fillna("") 
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
         
         columnas_requeridas = ['EVALUACION', 'ASIGNATURA', 'FECHA']
@@ -116,8 +116,10 @@ if st.session_state.get('procesar') and datos_input:
         calendar_df['End Date'] = calendar_df['Start Date']
         
         # --- LÓGICA DE HORA ---
-        tiene_hora = 'HORA' in df_final.columns
-        if tiene_hora:
+        tiene_columna_hora = 'HORA' in df_final.columns
+        hay_horas_en_seleccion = False
+        
+        if tiene_columna_hora:
             calendar_df['Start Time'] = df_final['HORA']
             tiempos_fin = []
             all_day_status = []
@@ -129,6 +131,7 @@ if st.session_state.get('procesar') and datos_input:
                         t_fin = t_inicio + timedelta(minutes=70)
                         tiempos_fin.append(t_fin.strftime("%H:%M"))
                         all_day_status.append('FALSE')
+                        hay_horas_en_seleccion = True
                     except:
                         tiempos_fin.append("") 
                         all_day_status.append('TRUE')
@@ -144,7 +147,6 @@ if st.session_state.get('procesar') and datos_input:
         calendar_df['Location'] = 'Universidad Mayor, Temuco'
         calendar_df['Private'] = 'TRUE'
 
-        # Ajuste de índice
         calendar_df.index = range(1, len(calendar_df) + 1)
         csv = calendar_df.to_csv(index=False).encode('utf-8')
         
@@ -158,9 +160,9 @@ if st.session_state.get('procesar') and datos_input:
             use_container_width=True
         )
 
-        # --- PREVISUALIZACIÓN SIN "NONE" ---
-        if tiene_hora:
-            # Forzamos que los valores nulos se vean como celdas vacías en la GUI
+        # --- PREVISUALIZACIÓN INTELIGENTE ---
+        # Solo mostramos columnas de tiempo si hay al menos una hora válida en lo que estamos viendo
+        if tiene_columna_hora and hay_horas_en_seleccion:
             st.dataframe(calendar_df[['Subject', 'Start Date', 'Start Time', 'End Time']].replace({None: "", "None": ""}), use_container_width=True)
         else:
             st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True)
