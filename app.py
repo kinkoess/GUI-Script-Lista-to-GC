@@ -48,30 +48,29 @@ else:
     if st.button("🚀 Procesar Tabla Pegada", use_container_width=True):
         st.session_state['procesar'] = True
 
-# --- PROCESAMIENTO ---
+# --- PROCESAMIENTO Y VALIDACIÓN ---
 if st.session_state.get('procesar') and datos_input:
     try:
-        # Diccionario de abreviaciones
-        abreviaciones = {
-            "1° Teórica": "1° T.",
-            "2° Teórica": "2° T.",
-            "3° Teórica": "3° T.",
-            "4° Teórica": "4° T.",
-            "1° Evaluación Clínica": "1° E.C.",
-            "2° Evaluación Clínica": "2° E.C.",
-            "Caso Clínico": "C.C.",
-            "Presentación CC": "P.CC",
-            "1° Examen": "1° E.",
-            "2° Examen": "2° E."
-        }
-
-        # Leer tabla
+        # Intentar leer la tabla primero
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
+        
+        # Validar que existan las columnas necesarias
+        columnas_requeridas = ['EVALUACION', 'ASIGNATURA', 'FECHA']
+        if not all(col in df.columns for col in columnas_requeridas):
+            st.error("❌ Error: La tabla no tiene el formato esperado (EVALUACION, ASIGNATURA, FECHA).")
+            st.stop() # DETIENE LA EJECUCIÓN AQUÍ SI HAY ERROR
 
+        # SI PASA LA VALIDACIÓN, RECIÉN AQUÍ DIBUJAMOS EL RESTO
         st.divider()
         
+        abreviaciones = {
+            "1° Teórica": "1° T.", "2° Teórica": "2° T.", "3° Teórica": "3° T.", "4° Teórica": "4° T.",
+            "1° Evaluación Clínica": "1° E.C.", "2° Evaluación Clínica": "2° E.C.", "Caso Clínico": "C.C.",
+            "Presentación CC": "P.CC", "1° Examen": "1° E.", "2° Examen": "2° E."
+        }
+
         # MODO DE EXPORTACIÓN
         st.subheader("2. Modo de Exportación")
         modo = st.radio(
@@ -112,13 +111,10 @@ if st.session_state.get('procesar') and datos_input:
         calendar_df['Location'] = 'Universidad Mayor, Temuco'
         calendar_df['Private'] = 'TRUE'
 
-        # AJUSTE DE ÍNDICE: Partir desde 1 en lugar de 0
         calendar_df.index = range(1, len(calendar_df) + 1)
-
         csv = calendar_df.to_csv(index=False).encode('utf-8')
         
         st.success(f"✅ ¡Datos listos! {len(calendar_df)} eventos encontrados.")
-        
         st.download_button(
             label=f"📥 Descargar {nombre_archivo}",
             data=csv,
@@ -126,9 +122,8 @@ if st.session_state.get('procesar') and datos_input:
             mime='text/csv',
             use_container_width=True
         )
-        
-        # Mostrar tabla con el índice corregido
         st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True)
 
     except Exception as e:
         st.error("❌ Error: La tabla no tiene el formato esperado. Asegúrate de copiar los encabezados.")
+        st.stop()
