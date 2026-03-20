@@ -49,7 +49,7 @@ datos_input = st.text_area(
 
 # Lógica del mensaje de bienvenida
 if not datos_input:
-    contenedor_mensaje.info("💡 Por favor, pega la tabla de OneNote arriba para comenzar. (Opcional: columna 'HORA' para bloques de 70 min)")
+    contenedor_mensaje.info("💡 Por favor, pega la tabla de OneNote arriba para comenzar. (Opcional: columna 'HORA')")
     st.session_state['procesar'] = False
 else:
     contenedor_mensaje.empty()
@@ -59,8 +59,10 @@ else:
 # --- PROCESAMIENTO Y VALIDACIÓN ---
 if st.session_state.get('procesar') and datos_input:
     try:
+        # Leer tabla y limpiar NaNs inmediatamente para evitar el "None" visual
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
+        df = df.fillna("") # Cambia los nulos por texto vacío
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
         
         columnas_requeridas = ['EVALUACION', 'ASIGNATURA', 'FECHA']
@@ -113,30 +115,40 @@ if st.session_state.get('procesar') and datos_input:
         calendar_df['Start Date'] = pd.to_datetime(df_final['FECHA'] + f"-{anio}", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
         calendar_df['End Date'] = calendar_df['Start Date']
         
-        # --- LÓGICA DE HORA HÍBRIDA ---
+        # --- LÓGICA DE HORA ---
         tiene_hora = 'HORA' in df_final.columns
         if tiene_hora:
             calendar_df['Start Time'] = df_final['HORA']
             tiempos_fin = []
+            all_day_status = []
+            
             for h in df_final['HORA']:
-                try:
-                    t_inicio = datetime.strptime(h, "%H:%M")
-                    t_fin = t_inicio + timedelta(minutes=70)
-                    tiempos_fin.append(t_fin.strftime("%H:%M"))
-                except:
-                    tiempos_fin.append("") 
+                if h and h != "":
+                    try:
+                        t_inicio = datetime.strptime(h, "%H:%M")
+                        t_fin = t_inicio + timedelta(minutes=70)
+                        tiempos_fin.append(t_fin.strftime("%H:%M"))
+                        all_day_status.append('FALSE')
+                    except:
+                        tiempos_fin.append("") 
+                        all_day_status.append('TRUE')
+                else:
+                    tiempos_fin.append("")
+                    all_day_status.append('TRUE')
+            
             calendar_df['End Time'] = tiempos_fin
-            calendar_df['All Day Event'] = 'FALSE'
+            calendar_df['All Day Event'] = all_day_status
         else:
             calendar_df['All Day Event'] = 'TRUE'
 
         calendar_df['Location'] = 'Universidad Mayor, Temuco'
         calendar_df['Private'] = 'TRUE'
 
+        # Ajuste de índice
         calendar_df.index = range(1, len(calendar_df) + 1)
         csv = calendar_df.to_csv(index=False).encode('utf-8')
         
-        st.success(f"✅ ¡Datos listos! {len(calendar_df)} eventos encontrados para '{nombre_archivo.replace('.csv', '')}'.")
+        st.success(f"✅ ¡Datos listos! {len(calendar_df)} eventos encontrados.")
         
         st.download_button(
             label=f"📥 Descargar {nombre_archivo}",
@@ -146,10 +158,10 @@ if st.session_state.get('procesar') and datos_input:
             use_container_width=True
         )
 
-        # --- PREVISUALIZACIÓN DINÁMICA ---
-        # Si tiene hora, mostramos las columnas de tiempo. Si no, solo fecha.
+        # --- PREVISUALIZACIÓN SIN "NONE" ---
         if tiene_hora:
-            st.dataframe(calendar_df[['Subject', 'Start Date', 'Start Time', 'End Time']], use_container_width=True)
+            # Forzamos que los valores nulos se vean como celdas vacías en la GUI
+            st.dataframe(calendar_df[['Subject', 'Start Date', 'Start Time', 'End Time']].replace({None: "", "None": ""}), use_container_width=True)
         else:
             st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True)
 
