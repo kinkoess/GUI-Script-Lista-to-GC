@@ -89,7 +89,7 @@ if st.session_state.get('procesar') and datos_input:
         df_final = pd.DataFrame()
         nombre_archivo = ""
 
-        if modo == "Lista Completa (Todo en un solo archivo)":
+        if modo == "Lista Completa (Todo en un solo calendario)":
             df_final = df.copy()
             nombre_archivo = "Evaluaciones.csv"
             st.info("ℹ️ Se exportarán todos los eventos detectados en la tabla.")
