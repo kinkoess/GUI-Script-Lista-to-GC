@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(page_title="OdontoCalendar Tool", page_icon="🦷")
@@ -8,18 +9,26 @@ st.set_page_config(page_title="OdontoCalendar Tool", page_icon="🦷")
 # --- ESTILO CSS PARA OCULTAR EL BOTÓN DE LA TABLA ---
 st.markdown("""
     <style>
-    /* Oculta el botón de descarga que sale sobre las tablas por defecto */
+    /* Oculta el botón de descarga automático de las tablas */
     [data-testid="stElementToolbar"] {
         display: none;
     }
     </style>
-    """, unsafe_allow_stdio=True, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 st.title("🦷 OdontoCalendar: OneNote a Google")
 
 # 1. Entrada de datos
-st.subheader("1. Pega tu tabla de OneNote")
-datos_input = st.text_area("Copia la tabla completa de OneNote y pégala aquí:", height=200, placeholder="EVALUACION\tASIGNATURA\tFECHA...")
+st.subheader("1. Configuración y Datos")
+col1, col2 = st.columns([1, 3])
+
+with col1:
+    # Selector de año dinámico (por defecto el año actual)
+    anio_actual = datetime.now().year
+    anio = st.number_input("Año Académico", value=anio_actual, step=1)
+
+with col2:
+    datos_input = st.text_area("Pega tu tabla de OneNote aquí:", height=150, placeholder="EVALUACION\tASIGNATURA\tFECHA...")
 
 # 2. Diccionario con el ORDEN y ABREVIACIONES
 abreviaciones = {
@@ -37,18 +46,20 @@ abreviaciones = {
 
 if datos_input:
     try:
+        # Procesar tabla
         df = pd.read_csv(io.StringIO(datos_input.strip()), sep='\t')
         df.columns = df.columns.str.strip()
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
         
+        # Filtrar opciones disponibles según el orden del diccionario
         opciones_disponibles = [opt for opt in abreviaciones.keys() if opt in df['EVALUACION'].unique()]
         otros = [opt for opt in df['EVALUACION'].unique() if opt not in abreviaciones.keys()]
         opciones_finales = opciones_disponibles + otros
 
         st.subheader("2. Filtra tu Calendario")
-        categoria = st.selectbox("¿Qué calendario vas a actualizar ahora?", opciones_finales)
+        categoria = st.selectbox("¿Qué calendario vas a actualizar?", opciones_finales)
         
-        # Procesamiento de datos
+        # Generar DataFrame filtrado
         df_filtrado = df[df['EVALUACION'] == categoria].copy()
         
         def formatear_titulo(fila):
@@ -59,17 +70,18 @@ if datos_input:
 
         calendar_df = pd.DataFrame()
         calendar_df['Subject'] = df_filtrado.apply(formatear_titulo, axis=1)
-        calendar_df['Start Date'] = pd.to_datetime(df_filtrado['FECHA'] + "-2026", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
+        # Usar el año seleccionado en el input
+        calendar_df['Start Date'] = pd.to_datetime(df_filtrado['FECHA'] + f"-{anio}", format='%d-%m-%Y').dt.strftime('%m/%d/%Y')
         calendar_df['End Date'] = calendar_df['Start Date']
         calendar_df['All Day Event'] = 'TRUE'
         calendar_df['Location'] = 'Universidad Mayor, Temuco'
         calendar_df['Private'] = 'TRUE'
 
-        # Botón de descarga con el icono y el nombre del archivo
+        # Botón de descarga
         csv = calendar_df.to_csv(index=False).encode('utf-8')
         nombre_archivo_final = f"{categoria}.csv"
         
-        st.success(f"¡Listo! Se encontraron {len(calendar_df)} eventos para {categoria}")
+        st.success(f"✅ Se encontraron {len(calendar_df)} eventos.")
         
         st.download_button(
             label=f"📥 Descargar archivo: {nombre_archivo_final}",
@@ -78,8 +90,8 @@ if datos_input:
             mime='text/csv',
         )
         
-        # Vista previa (sin el botón molesto encima)
+        # Vista previa limpia
         st.dataframe(calendar_df[['Subject', 'Start Date']], use_container_width=True) 
 
     except Exception as e:
-        st.error(f"Error al procesar: Revisa los encabezados de tu tabla.")
+        st.error("⚠️ Error: Asegúrate de copiar la tabla con los encabezados (EVALUACION, ASIGNATURA, FECHA).")
